@@ -140,4 +140,3 @@ def get_country_data(source, country, day_range, date=''):
 
     return data
 
-print(get_country_data('MODIS_NRT', 'PER', '5'))
