@@ -14,7 +14,7 @@ Note that code here only calculates the following proxy variables (as of 28/08/2
 - 30/90/180 day rolling averages for Temperature
 - 30/90/180 day rolling averages for Precipitation
 '''
-from constants import DEFAULT_FIRE_CONFIG
+from constants import DEFAULT_FIRE_CONFIG, DEFAULT_HTD_CONFIG
 
 import xarray as xr
 from xarray import Dataset, DataArray
@@ -185,41 +185,6 @@ def da_from_df(df: DataFrame, ds: Dataset, dims: list = ['latitude', 'longitude'
 
     return da
 
-    ds = xr.Dataset()
-    ds['fire'] = da
-
-    ds = ds.assign(time=lambda ds: ds.time.astype('datetime64[ns]')).transpose('latitude', 'longitude', 'time', 'step')
-
-    return ds
-
-def add_DAILY_fire_data(main_dataset: Dataset, fire_data: DataFrame, config: dict = DEFAULT_FIRE_CONFIG):
-    '''
-    NOTE: need to change helper functions (`process_fire_data` and `da_from_df`) to take configs before implementing this
-    
-    Adds daily fire data to a dataset; note that this considers fires from 1:00 to 1:00 as opposed to 0:00 to 24:00 as may be expected;
-    this doesn't really have a huge effect since there are not a lot of fires that happen entirely between 0:00 and 1:00 anyways
-
-    Parameters
-    ----------
-    main_dataset: Dataset
-        Dataset of input data (would like to add fire data to this)
-
-    fire_data: DataFrame
-        DataFrame (as read from csv) of fire data -- should be sourced from MODIS (other formats not currenlty supported)
-
-    config: dict (optional)
-        Thresholds for what is considered a fire; by default this is
-            - confidence > 70
-            - type == 0 (ie vegetation fire)
-    
-    Returns
-    -------
-    new_dataset: Dataset
-        Dataset with new 'fire' variable
-    '''
-
-    raise NotImplementedError
-
 def add_HOURLY_fire_data(main_dataset: Dataset, fire_data: DataFrame, config: dict = DEFAULT_FIRE_CONFIG):
     '''
     NOTE: need to check overpass frequency etc to see if it's even worth doing hourly data
@@ -310,3 +275,43 @@ def setup_dataset(main_path: str, prior_path: str, proxy_config: dict, drop_vars
             main_ds[proxy_name] = compute_proxy(main_ds, prior_ds, proxy_var, timeframe)
 
     return main_ds
+
+def hourly_to_daily(ds: Dataset, config: dict = DEFAULT_HTD_CONFIG):
+    '''
+    Takes a dataset with hourly data (lat, long, time [date], step) and converts it into a dataset with daily averages only
+
+    Parameters
+    ----------
+    ds: Dataset
+        Dataset containing all climate data, and potentially also fire data?
+
+    config: dict
+        For each variable, choice of 'presence', 'mean' or 'sum' -- how data will be combined. If nothing is specified, will return sum
+    
+    Returns
+    -------
+    daily_dataset: Dataset
+        Dataset containing same data but now daily
+    '''
+
+    reduced_ds = ds.reduce(np.sum, axis='step')
+
+    for var, func in config:
+        if var in ds:
+            match func:
+                case 'presence':
+                    var_da = ds[var].reduce(np.any, axis = 'step')
+                case 'mean':
+                    var_da = ds[var].reduce(np.mean, axis = 'step')
+                case 'sum':
+                    var_da = ds[var].reduce(np.sum, axis = 'step')
+                case _:
+                    print(f'[Hourly to Daily] {func} is not a recognised type of average')
+                    continue
+
+            reduced_ds[var] = var_da
+            
+        else:
+            print(f'[Hourly to Daily] {var} in config but not in Dataset -- skipping variable')
+
+    return reduced_ds

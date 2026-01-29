@@ -11,6 +11,11 @@ DEFAULT_FIRE_CONFIG = {
     'types': [0]
 }
 
+DEFAULT_HTD_CONFIG = {
+    'fire': 'presence',
+    't2m': 'sum'
+}
+
 ## requests -- default settings
 
 TRAIN_YEARS = ['2010', '2011', '2012', '2013', '2014']
